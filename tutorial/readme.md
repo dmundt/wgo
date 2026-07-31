@@ -429,3 +429,210 @@ additional_bom_items:
 ![](tutorial08.png)
 
 [Source](tutorial08.yml) - [Bill of Materials](tutorial08.bom.tsv)
+
+
+## 09 - Connection types
+
+* `con-cbl-con` — connector - cable - connector (the standard, see 01)
+* `con-cbl` — connector - cable, cable end unterminated
+* `cbl-con` — cable - connector, cable start unterminated
+* `fer-cbl` — ferrule - cable, cable end unterminated
+* `cbl-fer` — cable - ferrule, cable start unterminated
+
+For the ferrule types, a new ferrule is auto-generated for each wire, in both
+directions.
+
+These cover the remaining connection topologies from the upstream tutorial
+TODO list.
+
+
+```yaml
+connectors:
+  X1:
+    type: Molex KK 254
+    subtype: female
+    pincount: 4
+  X2:
+    type: Molex KK 254
+    subtype: male
+    pincount: 4
+  F1:
+    style: simple
+    type: Crimp ferrule
+    subtype: 0.5 mm²
+    color: YE
+
+cables:
+  W1: # con-cbl-con: terminated at both ends
+    wirecount: 4
+    length: 0.5
+    gauge: 0.25 mm2
+    color_code: DIN
+  W2: # cbl-con: free start, terminated at X2
+    wirecount: 2
+    length: 0.3
+    gauge: 0.25 mm2
+    colors: [RD, BK]
+  W3: # con-cbl: terminated at X1, free end
+    wirecount: 2
+    length: 0.3
+    gauge: 0.25 mm2
+    colors: [GN, YE]
+  W4: # fer-cbl: ferrule at the start, free end
+    wirecount: 2
+    length: 0.2
+    gauge: 0.25 mm2
+    colors: [BU, BN]
+  W5: # cbl-fer: free start, ferrule at the end
+    wirecount: 2
+    length: 0.2
+    gauge: 0.25 mm2
+    colors: [RD, GN]
+
+connections:
+  -
+    # con-cbl-con
+    - X1: [1-4]
+    - W1: [1-4]
+    - X2: [1-4]
+  -
+    # cbl-con (the cable is not connected at its start)
+    - W2: [1-2]
+    - X2: [1,2]
+  -
+    # con-cbl (the cable is not connected at its end)
+    - X1: [1,2]
+    - W3: [1-2]
+  -
+    # fer-cbl (the cable is not connected at its end)
+    # a new ferrule is auto-generated for each wire
+    - F1.
+    - W4: [1-2]
+  -
+    # cbl-fer (the cable is not connected at its start)
+    # a new ferrule is auto-generated for each wire
+    - W5: [1-2]
+    - F1.
+```
+
+![](tutorial09.png)
+
+[Source](tutorial09.yml) - [Bill of Materials](tutorial09.bom.tsv)
+
+
+## 10 - Custom color codes: looping and clipping
+
+* Named color codes: DIN, IEC, BW, TEL, TELALT, T568A, T568B
+* Clipping — fewer wires than palette colors: first N colors used
+* Looping — more wires than palette colors: palette repeated as needed
+
+
+```yaml
+connectors:
+  X1:
+    pincount: 3
+    type: Molex KK 254
+    subtype: female
+  X2:
+    pincount: 3
+    type: Molex KK 254
+    subtype: male
+  X3:
+    pincount: 5
+    type: Molex KK 254
+    subtype: female
+  X4:
+    pincount: 5
+    type: Molex KK 254
+    subtype: male
+  X5:
+    pincount: 4
+    type: Molex KK 254
+    subtype: female
+  X6:
+    pincount: 4
+    type: Molex KK 254
+    subtype: male
+
+cables:
+  W1: # clipping: IEC has 10 colors, only the first 3 are used (BN, RD, OG)
+    wirecount: 3
+    length: 0.3
+    gauge: 0.25 mm2
+    color_code: IEC
+  W2: # looping: BW has 2 colors, repeated 3 times and clipped (BK, WH, BK, WH, BK)
+    wirecount: 5
+    length: 0.3
+    gauge: 0.25 mm2
+    color_code: BW
+  W3: # neither: DIN has 60 colors, exactly the first 4 are used
+    wirecount: 4
+    length: 0.3
+    gauge: 0.25 mm2
+    color_code: DIN
+
+connections:
+  -
+    - X1: [1-3]
+    - W1: [1-3]
+    - X2: [1-3]
+  -
+    - X3: [1-5]
+    - W2: [1-5]
+    - X4: [1-5]
+  -
+    - X5: [1-4]
+    - W3: [1-4]
+    - X6: [1-4]
+```
+
+![](tutorial10.png)
+
+[Source](tutorial10.yml) - [Bill of Materials](tutorial10.bom.tsv)
+
+
+## 11 - Merging multiple templates
+
+* Merge two or more anchors with a list merge key: `<<: [*t1, *t2]`
+* Later keys override earlier ones
+
+
+```yaml
+connectors:
+  X1: &template_con # base connector template
+    type: Molex KK 254
+    subtype: female
+    pincount: 4
+  X2: &template_pins # shared pinout template
+    pinlabels: [GND, VCC, SCL, SDA]
+    notes: from shared pinout template
+  X3:
+    <<: [*template_con, *template_pins] # merge both templates
+    notes: merged from two templates # override one of the merged values
+
+cables:
+  W1:
+    wirecount: 4
+    length: 1
+    gauge: 0.25 mm2
+    color_code: IEC
+  W2:
+    wirecount: 4
+    length: 1
+    gauge: 0.25 mm2
+    color_code: DIN
+
+connections:
+  -
+    - X1: [1-4]
+    - W1: [1-4]
+    - X3: [1-4]
+  -
+    - X1: [1-4]
+    - W2: [1-4]
+    - X2: [1-4]
+```
+
+![](tutorial11.png)
+
+[Source](tutorial11.yml) - [Bill of Materials](tutorial11.bom.tsv)

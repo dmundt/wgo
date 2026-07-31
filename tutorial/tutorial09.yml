@@ -1,0 +1,77 @@
+# Connection types
+#
+# WireViz supports several connection topologies. The number of elements in a
+# connection set determines the type:
+#
+#   con-cbl-con  connector - cable - connector   (the standard, see tutorial 01)
+#   con-cbl      connector - cable               (cable end is unterminated)
+#   cbl-con      cable - connector               (cable start is unterminated)
+#   fer-cbl      ferrule - cable                 (cable end is unterminated)
+#   cbl-fer      cable - ferrule                 (cable start is unterminated)
+
+connectors:
+  X1:
+    type: Molex KK 254
+    subtype: female
+    pincount: 4
+  X2:
+    type: Molex KK 254
+    subtype: male
+    pincount: 4
+  F1:
+    style: simple
+    type: Crimp ferrule
+    subtype: 0.5 mm²
+    color: YE
+
+cables:
+  W1: # con-cbl-con: terminated at both ends
+    wirecount: 4
+    length: 0.5
+    gauge: 0.25 mm2
+    color_code: DIN
+  W2: # cbl-con: free start, terminated at X2
+    wirecount: 2
+    length: 0.3
+    gauge: 0.25 mm2
+    colors: [RD, BK]
+  W3: # con-cbl: terminated at X1, free end
+    wirecount: 2
+    length: 0.3
+    gauge: 0.25 mm2
+    colors: [GN, YE]
+  W4: # fer-cbl: ferrule at the start, free end
+    wirecount: 2
+    length: 0.2
+    gauge: 0.25 mm2
+    colors: [BU, BN]
+  W5: # cbl-fer: free start, ferrule at the end
+    wirecount: 2
+    length: 0.2
+    gauge: 0.25 mm2
+    colors: [RD, GN]
+
+connections:
+  -
+    # con-cbl-con
+    - X1: [1-4]
+    - W1: [1-4]
+    - X2: [1-4]
+  -
+    # cbl-con (the cable is not connected at its start)
+    - W2: [1-2]
+    - X2: [1,2]
+  -
+    # con-cbl (the cable is not connected at its end)
+    - X1: [1,2]
+    - W3: [1-2]
+  -
+    # fer-cbl (the cable is not connected at its end)
+    # a new ferrule is auto-generated for each wire
+    - F1.
+    - W4: [1-2]
+  -
+    # cbl-fer (the cable is not connected at its start)
+    # a new ferrule is auto-generated for each wire
+    - W5: [1-2]
+    - F1.
