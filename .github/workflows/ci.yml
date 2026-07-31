@@ -1,0 +1,213 @@
+﻿name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  schedule:
+    - cron: '0 3 * * 1' # weekly: Monday 03:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write # release job attaches binaries to GitHub releases
+
+jobs:
+  # Fast gate: format, vet, build, unit tests + gv/tsv golden tests on all OSes.
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt check
+        shell: bash
+        run: |
+          unformatted=$(gofmt -l cmd pkg)
+          if [ -n "$unformatted" ]; then
+            echo "Unformatted files:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: go mod tidy check
+        shell: bash
+        run: |
+          go mod tidy
+          if ! git diff --exit-code go.mod go.sum; then
+            echo "go.mod/go.sum are not tidy"; exit 1
+          fi
+
+      - name: vet
+        run: go vet ./...
+
+      - name: build
+        run: go build ./...
+
+      - name: test
+        run: go test -race ./...
+
+      - name: generate coverage
+        if: matrix.os == 'ubuntu-latest'
+        run: go test -coverpkg=./... -coverprofile=coverage.out ./...
+
+      - name: upload coverage
+        if: matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v7
+        with:
+          files: coverage.out
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+  # Full-format golden tests (svg/png/html) reproduce the environment the
+  # committed goldens were generated in: Windows + Graphviz 15.1.0.
+  golden:
+    name: golden (svg/png/html)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: install Graphviz 15.1.0
+        shell: pwsh
+        run: |
+          # winget is preinstalled on Windows runners and is more reliable
+          # than downloading the installer from gitlab.com.
+          winget install --id Graphviz.Graphviz --version 15.1.0 --scope machine --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $dot = Get-Command dot.exe -ErrorAction SilentlyContinue
+          if (-not $dot) { $dot = Get-Command "C:\Program Files\Graphviz\bin\dot.exe" -ErrorAction SilentlyContinue }
+          if ($dot) {
+            Split-Path $dot.Source | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          } else {
+            throw "dot.exe not found after installing Graphviz"
+          }
+
+      - name: run full golden tests
+        run: go test ./pkg/parser/ -run TestGoldenOutputs -count=1
+
+  # Static analysis.
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          # Pin explicitly: action v7+ is required for golangci-lint v2, and
+          # only v2 releases are built with a Go version that supports the
+          # go directive used by this module.
+          version: v2.12.2
+
+  # Dependency vulnerability scan (also run weekly via the schedule).
+  security:
+    name: security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  # Authoritative parity check: run the reference Python WireViz and wgo on
+  # every testdata input and diff all output formats. Both sides run on the
+  # same machine with the same Graphviz, so this is independent of the
+  # committed goldens (which are environment-bound).
+  parity:
+    name: parity (reference WireViz)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: install Graphviz
+        run: sudo apt-get update && sudo apt-get install -y graphviz
+
+      - name: install reference WireViz 0.4.1
+        run: pip install wireviz==0.4.1
+
+      - name: build wgo
+        run: go build -o wgo-bin ./cmd/wgo
+
+      - name: parity diff
+        shell: bash
+        run: |
+          set -eu
+          for yml in testdata/*.yml; do
+            name="$(basename "$yml" .yml)"
+            ref="$(mktemp -d)"; got="$(mktemp -d)"
+            wireviz -f ghtsp -O "$name" -o "$ref" "$yml" >/dev/null 2>&1
+            ./wgo-bin -f ghtsp -O "$name" -o "$got" "$yml" >/dev/null 2>&1
+            for ext in gv bom.tsv svg png html; do
+              if ! cmp -s "$ref/$name.$ext" "$got/$name.$ext"; then
+                echo "MISMATCH: $name.$ext"
+                diff "$ref/$name.$ext" "$got/$name.$ext" | head -40 || true
+                exit 1
+              fi
+            done
+          done
+          echo "All outputs match reference WireViz 0.4.1."
+
+  # Build and attach binaries to GitHub releases on version tags.
+  release:
+    name: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, golden, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: build binaries
+        shell: bash
+        run: |
+          mkdir -p dist
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            os="${target%/*}"; arch="${target#*/}"; ext=""
+            [ "$os" = windows ] && ext=".exe"
+            (cd cmd/wgo && GOOS=$os GOARCH=$arch CGO_ENABLED=0 \
+              go build -trimpath -ldflags "-s -w" -o "../../dist/wgo-${os}-${arch}${ext}" .)
+          done
+
+      - name: package
+        shell: bash
+        run: |
+          cd dist
+          for b in wgo-*; do
+            base="${b%.exe}"
+            zip -q "${base}.zip" "$b" ../LICENSE ../NOTICE ../README.md
+            rm "$b"
+          done
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true

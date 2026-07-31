@@ -1,0 +1,8 @@
+# Normalize all text files to LF in the repository and working tree.
+# Prevents CRLF churn and editor-driven re-encoding (which previously
+# corrupted UTF-8 literals such as the mm² unit).
+* text=auto eol=lf
+
+# Binary files must not be touched by line-ending normalization.
+*.png binary
+*.exe binary
