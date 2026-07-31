@@ -22,7 +22,6 @@
 package harness
 
 import (
-	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -41,6 +40,39 @@ func om(pairs ...any) *utils.OrderedMap {
 
 func newTestHarness() *Harness {
 	return NewHarness(utils.NewOrderedMap(), model.NewOptions(nil), model.NewTweak(nil))
+}
+
+func addConnector(t *testing.T, h *Harness, name string, attrs *utils.OrderedMap) {
+	t.Helper()
+	if err := h.AddConnector(name, attrs); err != nil {
+		t.Fatalf("AddConnector(%q): %v", name, err)
+	}
+}
+
+func addCable(t *testing.T, h *Harness, name string, attrs *utils.OrderedMap) {
+	t.Helper()
+	if err := h.AddCable(name, attrs); err != nil {
+		t.Fatalf("AddCable(%q): %v", name, err)
+	}
+}
+
+func connect(t *testing.T, h *Harness, args ...any) {
+	t.Helper()
+	err := h.Connect(args[0].(string), args[1], args[2].(string), args[3], args[4].(string), args[5])
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+}
+
+func assertConnectErr(t *testing.T, h *Harness, contains string, args ...any) {
+	t.Helper()
+	err := h.Connect(args[0].(string), args[1], args[2].(string), args[3], args[4].(string), args[5])
+	if err == nil {
+		t.Fatalf("expected error containing %q, got nil", contains)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), strings.ToLower(contains)) {
+		t.Fatalf("error %q does not contain %q", err, contains)
+	}
 }
 
 func TestPnInfoString(t *testing.T) {
@@ -91,14 +123,17 @@ func TestComponentTableEntry(t *testing.T) {
 
 func TestGenerateBom(t *testing.T) {
 	h := newTestHarness()
-	h.AddConnector("X1", om("type", "Molex KK 254", "subtype", "female",
+	addConnector(t, h, "X1", om("type", "Molex KK 254", "subtype", "female",
 		"pinlabels", []any{"GND", "VCC", "RX", "TX"}))
-	h.AddConnector("X2", om("type", "Molex KK 254", "subtype", "female",
+	addConnector(t, h, "X2", om("type", "Molex KK 254", "subtype", "female",
 		"pinlabels", []any{"GND", "VCC", "RX", "TX"}))
-	h.AddCable("W1", om("wirecount", 4, "color_code", "IEC", "gauge", "0.25 mm2",
+	addCable(t, h, "W1", om("wirecount", 4, "color_code", "IEC", "gauge", "0.25 mm2",
 		"length", 0.2, "shield", true))
 
-	bom := GenerateBom(h)
+	bom, err := GenerateBom(h)
+	if err != nil {
+		t.Fatalf("GenerateBom: %v", err)
+	}
 	if len(bom) != 2 {
 		t.Fatalf("expected 2 BOM entries, got %d: %+v", len(bom), bom)
 	}
@@ -134,10 +169,13 @@ func TestGenerateBom(t *testing.T) {
 
 func TestGenerateBomBundle(t *testing.T) {
 	h := newTestHarness()
-	h.AddCable("W2", om("category", "bundle", "colors", []any{"YE", "BK", "BK", "RD"},
+	addCable(t, h, "W2", om("category", "bundle", "colors", []any{"YE", "BK", "BK", "RD"},
 		"gauge", "0.25 mm2", "length", 1,
 		"pn", []any{"WIRE1", "WIRE2", "WIRE2", "WIRE3"}))
-	bom := GenerateBom(h)
+	bom, err := GenerateBom(h)
+	if err != nil {
+		t.Fatalf("GenerateBom: %v", err)
+	}
 	if len(bom) != 3 {
 		t.Fatalf("expected 3 bundle wire entries, got %d", len(bom))
 	}
@@ -158,8 +196,11 @@ func TestGenerateBomBundle(t *testing.T) {
 
 func TestGenerateBomIgnoreInBom(t *testing.T) {
 	h := newTestHarness()
-	h.AddConnector("X1", om("pincount", 2, "ignore_in_bom", true))
-	bom := GenerateBom(h)
+	addConnector(t, h, "X1", om("pincount", 2, "ignore_in_bom", true))
+	bom, err := GenerateBom(h)
+	if err != nil {
+		t.Fatalf("GenerateBom: %v", err)
+	}
 	if len(bom) != 0 {
 		t.Errorf("expected no BOM entries, got %d", len(bom))
 	}
@@ -167,9 +208,13 @@ func TestGenerateBomIgnoreInBom(t *testing.T) {
 
 func TestBomList(t *testing.T) {
 	h := newTestHarness()
-	h.AddConnector("X1", om("type", "Molex KK 254", "subtype", "female", "pincount", 4))
-	h.AddCable("W1", om("wirecount", 2, "length", 0.5))
-	rows := bomList(GenerateBom(h))
+	addConnector(t, h, "X1", om("type", "Molex KK 254", "subtype", "female", "pincount", 4))
+	addCable(t, h, "W1", om("wirecount", 2, "length", 0.5))
+	bom, err := GenerateBom(h)
+	if err != nil {
+		t.Fatalf("GenerateBom: %v", err)
+	}
+	rows := bomList(bom)
 	wantHeader := []any{"Id", "Description", "Qty", "Unit", "Designators"}
 	if !reflect.DeepEqual(rows[0], wantHeader) {
 		t.Errorf("header = %v", rows[0])
@@ -187,12 +232,18 @@ func TestBomList(t *testing.T) {
 
 func TestGetBomIndex(t *testing.T) {
 	h := newTestHarness()
-	h.AddConnector("X1", om("pincount", 2, "additional_components", []any{
+	addConnector(t, h, "X1", om("pincount", 2, "additional_components", []any{
 		om("type", "Crimp", "subtype", "x", "qty_multiplier", "pincount"),
 	}))
-	bom := GenerateBom(h)
+	bom, err := GenerateBom(h)
+	if err != nil {
+		t.Fatalf("GenerateBom: %v", err)
+	}
 	part := h.Connectors[0].AdditionalComponents[0]
-	id := getBomIndex(bom, partKey(part))
+	id, err := getBomIndex(bom, partKey(part))
+	if err != nil {
+		t.Fatalf("getBomIndex: %v", err)
+	}
 	found := false
 	for _, e := range bom {
 		if e.ID == id {
@@ -226,57 +277,42 @@ func TestBomEntryKey(t *testing.T) {
 }
 
 func TestConnectErrors(t *testing.T) {
-	assertPanicMsg := func(fn func(), contains string) {
-		t.Helper()
-		defer func() {
-			r := recover()
-			if r == nil {
-				t.Errorf("expected panic containing %q", contains)
-				return
-			}
-			if !strings.Contains(strings.ToLower(fmt.Sprintf("%v", r)), strings.ToLower(contains)) {
-				t.Errorf("panic %v does not contain %q", r, contains)
-			}
-		}()
-		fn()
-	}
-
 	h := newTestHarness()
-	h.AddConnector("X1", om("pincount", 2))
-	h.AddCable("W1", om("wirecount", 1))
-	assertPanicMsg(func() { h.Connect("X1", 9, "W1", 1, "", nil) }, "not found")
+	addConnector(t, h, "X1", om("pincount", 2))
+	addCable(t, h, "W1", om("wirecount", 1))
+	assertConnectErr(t, h, "not found", "X1", 9, "W1", 1, "", nil)
 
 	// Pin defined in both pins and pinlabels at different positions is ambiguous.
 	h2 := newTestHarness()
-	h2.AddConnector("X1", om("pins", []any{1, 2}, "pinlabels", []any{2, 1}))
-	h2.AddCable("W1", om("wirecount", 1))
-	assertPanicMsg(func() { h2.Connect("X1", 2, "W1", 1, "", nil) }, "defined both in pinlabels and pins")
+	addConnector(t, h2, "X1", om("pins", []any{1, 2}, "pinlabels", []any{2, 1}))
+	addCable(t, h2, "W1", om("wirecount", 1))
+	assertConnectErr(t, h2, "defined both in pinlabels and pins", "X1", 2, "W1", 1, "", nil)
 
 	// Pin label defined more than once.
 	h3 := newTestHarness()
-	h3.AddConnector("X1", om("pins", []any{1, 2, 3}, "pinlabels", []any{"A", "A", "B"}))
-	h3.AddCable("W1", om("wirecount", 1))
-	assertPanicMsg(func() { h3.Connect("X1", "A", "W1", 1, "", nil) }, "defined more than once")
+	addConnector(t, h3, "X1", om("pins", []any{1, 2, 3}, "pinlabels", []any{"A", "A", "B"}))
+	addCable(t, h3, "W1", om("wirecount", 1))
+	assertConnectErr(t, h3, "defined more than once", "X1", "A", "W1", 1, "", nil)
 
 	// Pin not found at all.
 	h4 := newTestHarness()
-	h4.AddConnector("X1", om("pins", []any{1, 2}, "pinlabels", []any{"A", "B"}))
-	h4.AddCable("W1", om("wirecount", 1))
-	assertPanicMsg(func() { h4.Connect("X1", "C", "W1", 1, "", nil) }, "not found")
+	addConnector(t, h4, "X1", om("pins", []any{1, 2}, "pinlabels", []any{"A", "B"}))
+	addCable(t, h4, "W1", om("wirecount", 1))
+	assertConnectErr(t, h4, "not found", "X1", "C", "W1", 1, "", nil)
 
 	// Cable color used for more than one wire.
 	h5 := newTestHarness()
-	h5.AddConnector("X1", om("pincount", 4))
-	h5.AddCable("W1", om("wirecount", 4, "colors", []any{"BN", "BN", "GN", "YE"}))
-	assertPanicMsg(func() { h5.Connect("X1", 1, "W1", "BN", "", nil) }, "used for more than one wire")
+	addConnector(t, h5, "X1", om("pincount", 4))
+	addCable(t, h5, "W1", om("wirecount", 4, "colors", []any{"BN", "BN", "GN", "YE"}))
+	assertConnectErr(t, h5, "used for more than one wire", "X1", 1, "W1", "BN", "", nil)
 
-	// Valid connection must not panic.
+	// Valid connection must not fail.
 	h6 := newTestHarness()
-	h6.AddConnector("X1", om("pincount", 2))
-	h6.AddConnector("X2", om("pincount", 2))
-	h6.AddCable("W1", om("wirecount", 2))
-	h6.Connect("X1", 1, "W1", 1, "X2", 1)
-	h6.Connect("X1", 2, "W1", 2, "X2", 2)
+	addConnector(t, h6, "X1", om("pincount", 2))
+	addConnector(t, h6, "X2", om("pincount", 2))
+	addCable(t, h6, "W1", om("wirecount", 2))
+	connect(t, h6, "X1", 1, "W1", 1, "X2", 1)
+	connect(t, h6, "X1", 2, "W1", 2, "X2", 2)
 	c, _ := h6.CableByName("W1")
 	if len(c.Connections) != 2 {
 		t.Errorf("connections = %d", len(c.Connections))
@@ -285,8 +321,8 @@ func TestConnectErrors(t *testing.T) {
 
 func TestAddMateActivatesPins(t *testing.T) {
 	h := newTestHarness()
-	h.AddConnector("X1", om("pincount", 2))
-	h.AddConnector("X2", om("pincount", 2))
+	addConnector(t, h, "X1", om("pincount", 2))
+	addConnector(t, h, "X2", om("pincount", 2))
 	h.AddMatePin("X1", 1, "X2", 2, "<->")
 	if len(h.Mates) != 1 {
 		t.Fatalf("mates = %d", len(h.Mates))
@@ -300,12 +336,15 @@ func TestAddMateActivatesPins(t *testing.T) {
 
 func TestCreateGraphSmoke(t *testing.T) {
 	h := newTestHarness()
-	h.AddConnector("X1", om("type", "Molex KK 254", "subtype", "female", "pincount", 2))
-	h.AddConnector("X2", om("type", "Molex KK 254", "subtype", "female", "pincount", 2))
-	h.AddCable("W1", om("wirecount", 2, "color_code", "IEC", "gauge", "0.25 mm2", "length", 0.2))
-	h.Connect("X1", 1, "W1", 1, "X2", 1)
-	h.Connect("X1", 2, "W1", 2, "X2", 2)
-	g := h.CreateGraph()
+	addConnector(t, h, "X1", om("type", "Molex KK 254", "subtype", "female", "pincount", 2))
+	addConnector(t, h, "X2", om("type", "Molex KK 254", "subtype", "female", "pincount", 2))
+	addCable(t, h, "W1", om("wirecount", 2, "color_code", "IEC", "gauge", "0.25 mm2", "length", 0.2))
+	connect(t, h, "X1", 1, "W1", 1, "X2", 1)
+	connect(t, h, "X1", 2, "W1", 2, "X2", 2)
+	g, err := h.CreateGraph()
+	if err != nil {
+		t.Fatalf("CreateGraph: %v", err)
+	}
 	src := g.Source()
 	for _, want := range []string{
 		"// Graph generated by WireViz " + model.Version,

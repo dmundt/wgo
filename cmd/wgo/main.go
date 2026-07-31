@@ -131,7 +131,8 @@ func main() {
 		fmt.Println("Prepend file:", pf)
 		t, err := utils.FileReadText(pf)
 		if err != nil {
-			panic(err)
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
 		}
 		prependInput += t + "\n"
 	}
@@ -155,7 +156,8 @@ func main() {
 
 		yamlInput, err := utils.FileReadText(file)
 		if err != nil {
-			panic(err)
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
 		}
 		yamlInput = prependInput + yamlInput
 		fileDir := filepath.Dir(file)
@@ -165,7 +167,8 @@ func main() {
 		}
 
 		if err := parser.Run(yamlInput, file, _outputDir, _outputName, outputFormats, imagePaths); err != nil {
-			panic(err)
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
 		}
 	}
 	fmt.Println()

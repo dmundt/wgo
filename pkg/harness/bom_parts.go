@@ -44,19 +44,29 @@ func partKey(part model.AdditionalComponent) []string {
 }
 
 // getAdditionalComponentTable returns diagram node row strings for additional components.
-func getAdditionalComponentTable(h *Harness, component any) []any {
+func getAdditionalComponentTable(h *Harness, component any) ([]any, error) {
 	var rows []any
 	parts := compAdditionalComponents(component)
 	if len(parts) > 0 {
 		rows = append(rows, []any{"Additional components"})
 		for _, part := range parts {
-			mult := compQtyMultiplier(component, part.QtyMultiplier)
+			mult, err := compQtyMultiplier(component, part.QtyMultiplier)
+			if err != nil {
+				return nil, err
+			}
 			if !truthyVal(mult) {
 				continue
 			}
 			qty := model.MulNum(part.Qty, mult)
 			if h.Options.MiniBomMode {
-				id := getBomIndex(h.Bom(), partKey(part))
+				bom, err := h.Bom()
+				if err != nil {
+					return nil, err
+				}
+				id, err := getBomIndex(bom, partKey(part))
+				if err != nil {
+					return nil, err
+				}
 				rows = append(rows, componentTableEntry(
 					fmt.Sprintf("#%d (%s)", id, rstripSpace(part.Type)),
 					qty, part.Unit, part.Bgcolor, "", "", "", "", "",
@@ -69,17 +79,20 @@ func getAdditionalComponentTable(h *Harness, component any) []any {
 			}
 		}
 	}
-	return rows
+	return rows, nil
 }
 
 // getAdditionalComponentBom returns BOM entries for additional components.
-func getAdditionalComponentBom(component any) []BOMEntry {
+func getAdditionalComponentBom(component any) ([]BOMEntry, error) {
 	var entries []BOMEntry
 	parts := compAdditionalComponents(component)
 	name := compName(component)
 	showName := compShowName(component)
 	for _, part := range parts {
-		mult := compQtyMultiplier(component, part.QtyMultiplier)
+		mult, err := compQtyMultiplier(component, part.QtyMultiplier)
+		if err != nil {
+			return nil, err
+		}
 		if !truthyVal(mult) {
 			continue
 		}
@@ -99,7 +112,7 @@ func getAdditionalComponentBom(component any) []BOMEntry {
 			Spn:          strOrNil(part.Spn),
 		})
 	}
-	return entries
+	return entries, nil
 }
 
 func compAdditionalComponents(component any) []model.AdditionalComponent {
@@ -112,14 +125,14 @@ func compAdditionalComponents(component any) []model.AdditionalComponent {
 	return nil
 }
 
-func compQtyMultiplier(component any, qm string) any {
+func compQtyMultiplier(component any, qm string) (any, error) {
 	switch c := component.(type) {
 	case *model.Connector:
 		return c.GetQtyMultiplier(qm)
 	case *model.Cable:
 		return c.GetQtyMultiplier(qm)
 	}
-	return 1
+	return 1, nil
 }
 
 func compName(component any) string {

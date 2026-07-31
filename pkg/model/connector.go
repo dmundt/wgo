@@ -72,11 +72,13 @@ var connectorFields = map[string]bool{
 }
 
 // NewConnector builds a Connector from a YAML dict and runs the post-init logic.
-func NewConnector(name string, attrs *utils.OrderedMap) *Connector {
-	CheckOld(fmt.Sprintf("Connector '%s'", name), attrs)
+func NewConnector(name string, attrs *utils.OrderedMap) (*Connector, error) {
+	if err := CheckOld(fmt.Sprintf("Connector '%s'", name), attrs); err != nil {
+		return nil, err
+	}
 	for _, k := range attrs.Keys() {
 		if !connectorFields[k] {
-			panic(fmt.Errorf("Connector.__init__() got an unexpected keyword argument '%s'", k))
+			return nil, fmt.Errorf("Connector.__init__() got an unexpected keyword argument '%s'", k)
 		}
 	}
 	c := &Connector{
@@ -84,8 +86,7 @@ func NewConnector(name string, attrs *utils.OrderedMap) *Connector {
 		VisiblePins: map[any]bool{},
 	}
 	if attrs == nil {
-		c.postInit()
-		return c
+		return c, c.postInit()
 	}
 	c.Bgcolor = attrStr(attrs, "bgcolor")
 	c.BgcolorTitle = attrStr(attrs, "bgcolor_title")
@@ -165,18 +166,17 @@ func NewConnector(name string, attrs *utils.OrderedMap) *Connector {
 			}
 		}
 	}
-	c.postInit()
-	return c
+	return c, c.postInit()
 }
 
-func (c *Connector) postInit() {
+func (c *Connector) postInit() error {
 	c.PortsLeft = false
 	c.PortsRight = false
 	c.VisiblePins = map[any]bool{}
 
 	if c.Style == "simple" {
 		if c.Pincount > 1 {
-			panic(fmt.Errorf("Connectors with style set to simple may only have one pin"))
+			return fmt.Errorf("Connectors with style set to simple may only have one pin")
 		}
 		c.Pincount = 1
 	}
@@ -184,7 +184,7 @@ func (c *Connector) postInit() {
 	if c.Pincount == 0 {
 		c.Pincount = max(len(c.Pins), len(c.Pinlabels), len(c.Pincolors))
 		if c.Pincount == 0 {
-			panic(fmt.Errorf("You need to specify at least one, pincount, pins, pinlabels, or pincolors"))
+			return fmt.Errorf("You need to specify at least one, pincount, pins, pinlabels, or pincolors")
 		}
 	}
 
@@ -195,7 +195,7 @@ func (c *Connector) postInit() {
 	}
 
 	if len(c.Pins) != len(uniqueSet(c.Pins)) {
-		panic(fmt.Errorf("Pins are not unique"))
+		return fmt.Errorf("Pins are not unique")
 	}
 
 	if !c.showNameSet {
@@ -207,15 +207,16 @@ func (c *Connector) postInit() {
 
 	for _, loop := range c.Loops {
 		if len(loop) != 2 {
-			panic(fmt.Errorf("Loops must be between exactly two pins!"))
+			return fmt.Errorf("Loops must be between exactly two pins!")
 		}
 		for _, pin := range loop {
 			if !containsAny(c.Pins, pin) {
-				panic(fmt.Errorf("Unknown loop pin %q for connector %q!", utils.PyStr(pin), c.Name))
+				return fmt.Errorf("Unknown loop pin %q for connector %q!", utils.PyStr(pin), c.Name)
 			}
 			c.ActivatePin(pin, SideNone)
 		}
 	}
+	return nil
 }
 
 func (c *Connector) ActivatePin(pin any, side Side) {
@@ -229,12 +230,12 @@ func (c *Connector) ActivatePin(pin any, side Side) {
 }
 
 // GetQtyMultiplier returns the multiplier for the given qty_multiplier name.
-func (c *Connector) GetQtyMultiplier(qtyMultiplier string) any {
+func (c *Connector) GetQtyMultiplier(qtyMultiplier string) (any, error) {
 	switch qtyMultiplier {
 	case "":
-		return 1
+		return 1, nil
 	case "pincount":
-		return c.Pincount
+		return c.Pincount, nil
 	case "populated":
 		n := 0
 		for _, v := range c.VisiblePins {
@@ -242,7 +243,7 @@ func (c *Connector) GetQtyMultiplier(qtyMultiplier string) any {
 				n++
 			}
 		}
-		return n
+		return n, nil
 	case "unpopulated":
 		n := 0
 		for _, v := range c.VisiblePins {
@@ -251,10 +252,10 @@ func (c *Connector) GetQtyMultiplier(qtyMultiplier string) any {
 			}
 		}
 		if c.Pincount-n < 0 {
-			return 0
+			return 0, nil
 		}
-		return c.Pincount - n
+		return c.Pincount - n, nil
 	default:
-		panic(fmt.Errorf("invalid qty multiplier parameter for connector %s", qtyMultiplier))
+		return nil, fmt.Errorf("invalid qty multiplier parameter for connector %s", qtyMultiplier)
 	}
 }

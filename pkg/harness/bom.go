@@ -89,7 +89,7 @@ func NewBOMEntryFromMap(m *utils.OrderedMap) BOMEntry {
 }
 
 // GenerateBom mirrors wv_bom.generate_bom.
-func GenerateBom(h *Harness) []BOMEntry {
+func GenerateBom(h *Harness) ([]BOMEntry, error) {
 	var entries []BOMEntry
 	for _, connector := range h.Connectors {
 		if !connector.IgnoreInBom {
@@ -120,7 +120,11 @@ func GenerateBom(h *Harness) []BOMEntry {
 				Spn:          strOrNil(connector.Spn),
 			})
 		}
-		entries = append(entries, getAdditionalComponentBom(connector)...)
+		parts, err := getAdditionalComponentBom(connector)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, parts...)
 	}
 
 	for _, cable := range h.Cables {
@@ -187,7 +191,11 @@ func GenerateBom(h *Harness) []BOMEntry {
 				}
 			}
 		}
-		entries = append(entries, getAdditionalComponentBom(cable)...)
+		parts, err := getAdditionalComponentBom(cable)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, parts...)
 	}
 
 	entries = append(entries, h.AdditionalBomItems...)
@@ -241,7 +249,7 @@ func GenerateBom(h *Harness) []BOMEntry {
 	for idx := range bom {
 		bom[idx].ID = idx + 1
 	}
-	return bom
+	return bom, nil
 }
 
 func strOrNil(v string) any {
@@ -367,12 +375,12 @@ func keysEqual(a, b []string) bool {
 	return compareKeys(a, b) == 0
 }
 
-// getBomIndex returns the id of a BOM entry matching target, panicking if absent.
-func getBomIndex(bom []BOMEntry, target []string) int {
+// getBomIndex returns the id of a BOM entry matching target.
+func getBomIndex(bom []BOMEntry, target []string) (int, error) {
 	for _, e := range bom {
 		if keysEqual(bomEntryKey(e), target) {
-			return e.ID
+			return e.ID, nil
 		}
 	}
-	panic(fmt.Errorf("%s", "Internal error: No BOM entry found matching: "+strings.Join(target, "|")))
+	return 0, fmt.Errorf("Internal error: No BOM entry found matching: %s", strings.Join(target, "|"))
 }

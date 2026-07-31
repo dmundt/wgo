@@ -41,7 +41,10 @@ func (h *Harness) Output(filename string, fmts []string) error {
 			return err
 		}
 	}
-	g := h.CreateGraph()
+	g, err := h.CreateGraph()
+	if err != nil {
+		return err
+	}
 	source := g.Source()
 
 	for _, f := range fmts {
@@ -72,7 +75,11 @@ func (h *Harness) Output(filename string, fmts []string) error {
 		}
 	}
 
-	bomlist := bomList(h.Bom())
+	bom, err := h.Bom()
+	if err != nil {
+		return err
+	}
+	bomlist := bomList(bom)
 	if contains(fmts, "tsv") {
 		if err := utils.FileWriteText(filename+".bom.tsv", utils.Tuplelist2tsv(bomlist, nil)); err != nil {
 			return err
