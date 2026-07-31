@@ -62,7 +62,12 @@ func TestScalarResolution(t *testing.T) {
 		{"k: 1e3", "1e3"}, // no decimal point: stays a string
 		{"k: 1.5", 1.5},
 		{"k: -0.5", -0.5},
-		{"k: 1:30", 90},               // sexagesimal
+		{"k: 1:30", 90},     // sexagesimal int
+		{"k: 1:30.5", 90.5}, // sexagesimal float
+		{"k: -1:30.5", -90.5},
+		{"k: 0:30.5", 30.5},
+		{"k: 12:34:56.78", 45296.78},
+		{"k: 1:30.5e2", "1:30.5e2"},   // no exponent in sexagesimal floats
 		{"k: '08500030'", "08500030"}, // quoted: always string
 		{`k: "yes"`, "yes"},
 		{"k: |\n  yes\n", "yes\n"}, // block literal: string
@@ -86,6 +91,29 @@ func TestScalarResolutionInf(t *testing.T) {
 	got = resolveKey(t, "k: -.Inf")
 	if f, ok := got.(float64); !ok || !math.IsInf(f, -1) {
 		t.Errorf("-.Inf = %#v, want -Inf", got)
+	}
+}
+
+// TestBlockScalarChomping pins the chomping behavior at end of file, which
+// PyYAML and yaml.v3 must agree on. A clip-chomped block scalar keeps its
+// trailing newline only when the document ends with one.
+func TestBlockScalarChomping(t *testing.T) {
+	cases := []struct {
+		in   string
+		want any
+	}{
+		{"k: |\n  yes", "yes"},      // clip, EOF without newline
+		{"k: |\n  yes\n", "yes\n"},  // clip, EOF with newline
+		{"k: |-\n  yes\n", "yes"},   // strip
+		{"k: |+\n  yes\n", "yes\n"}, // keep
+		{"k: >\n  a\n  b", "a b"},   // folded, EOF without newline
+		{"k: >\n  a\n  b\n", "a b\n"},
+	}
+	for _, c := range cases {
+		got := resolveKey(t, c.in)
+		if got != c.want {
+			t.Errorf("%q = %q, want %q", c.in, got, c.want)
+		}
 	}
 }
 

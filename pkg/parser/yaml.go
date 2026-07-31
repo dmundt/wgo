@@ -246,8 +246,36 @@ func pyFloat(s string) (any, bool) {
 	case strings.HasSuffix(lower, "nan"):
 		return math.NaN(), true
 	}
+	if strings.Contains(clean, ":") {
+		return sexagesimalFloat(clean)
+	}
 	if v, err := strconv.ParseFloat(clean, 64); err == nil {
 		return v, true
 	}
 	return nil, false
+}
+
+// sexagesimalFloat converts "1:30.5" to 90.5 like PyYAML's
+// construct_yaml_float: sign is stripped first, then the parts are summed
+// base-60 from the right (e.g. "12:34:56.78" = 12*60^2 + 34*60 + 56.78).
+func sexagesimalFloat(s string) (any, bool) {
+	sign := 1.0
+	if strings.HasPrefix(s, "-") {
+		sign = -1
+		s = s[1:]
+	} else if strings.HasPrefix(s, "+") {
+		s = s[1:]
+	}
+	parts := strings.Split(s, ":")
+	var total float64
+	base := 1.0
+	for i := len(parts) - 1; i >= 0; i-- {
+		v, err := strconv.ParseFloat(parts[i], 64)
+		if err != nil {
+			return nil, false
+		}
+		total += v * base
+		base *= 60
+	}
+	return sign * total, true
 }
