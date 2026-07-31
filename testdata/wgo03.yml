@@ -1,0 +1,39 @@
+# Merging multiple templates
+#
+# YAML merge keys (<<:) can pull from more than one anchor at once by giving a
+# list of anchors. This lets a part inherit a base template and a shared
+# pinout template at the same time. Later keys override earlier ones.
+
+connectors:
+  X1: &template_con # base connector template
+    type: Molex KK 254
+    subtype: female
+    pincount: 4
+  X2: &template_pins # shared pinout template
+    pinlabels: [GND, VCC, SCL, SDA]
+    notes: from shared pinout template
+  X3:
+    <<: [*template_con, *template_pins] # merge both templates
+    notes: merged from two templates # override one of the merged values
+
+cables:
+  W1:
+    wirecount: 4
+    length: 1
+    gauge: 0.25 mm2
+    color_code: IEC
+  W2:
+    wirecount: 4
+    length: 1
+    gauge: 0.25 mm2
+    color_code: DIN
+
+connections:
+  -
+    - X1: [1-4]
+    - W1: [1-4]
+    - X3: [1-4]
+  -
+    - X1: [1-4]
+    - W2: [1-4]
+    - X2: [1-4]

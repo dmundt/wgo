@@ -1,0 +1,10 @@
+Id	Description	Qty	Unit	Designators
+1	Cable, 3 x 0.25 mm²	0.3	m	W1
+2	Cable, 4 x 0.25 mm²	0.3	m	W3
+3	Cable, 5 x 0.25 mm²	0.3	m	W2
+4	Connector, Molex KK 254, female, 3 pins	1		X1
+5	Connector, Molex KK 254, female, 4 pins	1		X5
+6	Connector, Molex KK 254, female, 5 pins	1		X3
+7	Connector, Molex KK 254, male, 3 pins	1		X2
+8	Connector, Molex KK 254, male, 4 pins	1		X6
+9	Connector, Molex KK 254, male, 5 pins	1		X4
