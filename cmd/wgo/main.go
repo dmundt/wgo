@@ -195,7 +195,9 @@ func uniqueStrings(list []string) []string {
 }
 
 // splitArgs separates flags (and their values) from positional file arguments,
-// so flags may appear before or after files like Python's click allows.
+// so flags may appear before or after files like Python's click allows. A
+// "--" terminator stops flag splitting: everything after it is positional,
+// matching both Go's flag package and click.
 func splitArgs(args []string) (flagArgs, positional []string) {
 	knownVal := map[string]bool{
 		"-f": true, "--format": true,
@@ -203,9 +205,15 @@ func splitArgs(args []string) (flagArgs, positional []string) {
 		"-O": true, "--output-name": true,
 		"-p": true, "--prepend": true,
 	}
+	afterTerminator := false
 	for i := 0; i < len(args); i++ {
 		a := args[i]
-		if strings.HasPrefix(a, "-") && a != "-" {
+		if !afterTerminator && a == "--" {
+			afterTerminator = true
+			flagArgs = append(flagArgs, a)
+			continue
+		}
+		if !afterTerminator && strings.HasPrefix(a, "-") && a != "-" {
 			flagArgs = append(flagArgs, a)
 			if knownVal[a] {
 				i++

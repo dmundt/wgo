@@ -53,19 +53,77 @@ func TestUniqueStrings(t *testing.T) {
 }
 
 func TestSplitArgs(t *testing.T) {
-	flags, pos := splitArgs([]string{"-f", "gt", "a.yml", "-o", "out", "b.yml"})
-	if !reflect.DeepEqual(flags, []string{"-f", "gt", "-o", "out"}) {
-		t.Errorf("flags = %v", flags)
+	cases := []struct {
+		name string
+		args []string
+		flag []string
+		pos  []string
+	}{
+		{
+			name: "flags around positionals",
+			args: []string{"-f", "gt", "a.yml", "-o", "out", "b.yml"},
+			flag: []string{"-f", "gt", "-o", "out"},
+			pos:  []string{"a.yml", "b.yml"},
+		},
+		{
+			name: "long flag after positionals",
+			args: []string{"a.yml", "--format", "gt"},
+			flag: []string{"--format", "gt"},
+			pos:  []string{"a.yml"},
+		},
+		{
+			name: "equals form short",
+			args: []string{"-f=gt", "a.yml"},
+			flag: []string{"-f=gt"},
+			pos:  []string{"a.yml"},
+		},
+		{
+			name: "equals form long",
+			args: []string{"a.yml", "--format=gt", "-o=out"},
+			flag: []string{"--format=gt", "-o=out"},
+			pos:  []string{"a.yml"},
+		},
+		{
+			name: "terminator then normal positional",
+			args: []string{"--", "a.yml"},
+			flag: []string{"--"},
+			pos:  []string{"a.yml"},
+		},
+		{
+			name: "terminator then dash positional",
+			args: []string{"a.yml", "--", "-b.yml"},
+			flag: []string{"--"},
+			pos:  []string{"a.yml", "-b.yml"},
+		},
+		{
+			name: "single dash is positional",
+			args: []string{"-"},
+			flag: nil,
+			pos:  []string{"-"},
+		},
+		{
+			name: "missing flag value at end",
+			args: []string{"a.yml", "-f"},
+			flag: []string{"-f"},
+			pos:  []string{"a.yml"},
+		},
+		{
+			name: "flag value that looks like a flag",
+			args: []string{"-p", "-o"},
+			flag: []string{"-p", "-o"},
+			pos:  nil,
+		},
 	}
-	if !reflect.DeepEqual(pos, []string{"a.yml", "b.yml"}) {
-		t.Errorf("pos = %v", pos)
-	}
-	flags, pos = splitArgs([]string{"--format=hpst", "x.yml"})
-	if !reflect.DeepEqual(flags, []string{"--format=hpst"}) {
-		t.Errorf("flags = %v", flags)
-	}
-	if !reflect.DeepEqual(pos, []string{"x.yml"}) {
-		t.Errorf("pos = %v", pos)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			flag, pos := splitArgs(c.args)
+			if !reflect.DeepEqual(flag, c.flag) {
+				t.Errorf("splitArgs(%v) flags = %v, want %v", c.args, flag, c.flag)
+			}
+			if !reflect.DeepEqual(pos, c.pos) {
+				t.Errorf("splitArgs(%v) positional = %v, want %v", c.args, pos, c.pos)
+			}
+		})
 	}
 }
 
