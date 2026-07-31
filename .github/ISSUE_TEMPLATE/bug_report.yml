@@ -1,0 +1,44 @@
+name: Bug report
+description: Report a bug in wgo
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: wgo version
+      description: Output of `wgo -V`
+    validations:
+      required: true
+  - type: textarea
+    id: input
+    attributes:
+      label: Input YAML
+      description: Minimal reproducer. Omit if not applicable.
+      render: yaml
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected output
+      description: What did you expect? Include the reference WireViz output if you have it.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual output
+      description: What did wgo produce? Paste `.gv`/`.bom.tsv`/error output.
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Go version, Graphviz version (if relevant).
+      placeholder: |
+        - OS: Windows 11
+        - Go: 1.25
+        - Graphviz: 15.1.0
+    validations:
+      required: false
