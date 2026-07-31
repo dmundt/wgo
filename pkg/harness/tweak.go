@@ -32,7 +32,7 @@ import (
 	"github.com/dmundt/wgo/pkg/utils"
 )
 
-func (h *Harness) applyTweak(dot *graph.Graph) {
+func (h *Harness) applyTweak(dot *graph.Graph) error {
 	if h.Tweak == nil || h.Tweak.Override == nil {
 		goto appendBlock
 	}
@@ -47,7 +47,7 @@ func (h *Harness) applyTweak(dot *graph.Graph) {
 		}
 		om, ok := d.(*utils.OrderedMap)
 		if !ok {
-			panic(fmt.Errorf("Unexpected value type of tweak.override.%s: Expected dict, got %T", keyword, d))
+			return fmt.Errorf("Unexpected value type of tweak.override.%s: Expected dict, got %T", keyword, d)
 		}
 		for _, av := range om.Items() {
 			a := av.Key
@@ -88,6 +88,7 @@ appendBlock:
 			dot.Body = append(dot.Body, utils.PyStr(app))
 		}
 	}
+	return nil
 }
 
 var bodyKeywordRe = regexp.MustCompile(`(?s)^\t*(?:"([^"]+)"|([^ "]+)) \[.*\]$`)

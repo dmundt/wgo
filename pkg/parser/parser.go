@@ -167,7 +167,9 @@ func Run(yamlInput, yamlFilePath, outputDir, outputName string, formats []string
 	connectionSetsVal, _ := om.Get("connections")
 	connectionSets, _ := connectionSetsVal.([]any)
 
-	processConnections(connectionSets, opts.TemplateSeparator, templateConnectors, templateCables, h)
+	if err := processConnections(connectionSets, opts.TemplateSeparator, templateConnectors, templateCables, h); err != nil {
+		return err
+	}
 
 	if v, ok := om.Get("additional_bom_items"); ok {
 		if l, ok := v.([]any); ok {

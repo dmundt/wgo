@@ -58,17 +58,25 @@ func NewHarness(metadata *utils.OrderedMap, options *model.Options, tweak *model
 }
 
 // AddConnector adds a connector instance.
-func (h *Harness) AddConnector(name string, attrs *utils.OrderedMap) {
-	c := model.NewConnector(name, attrs)
+func (h *Harness) AddConnector(name string, attrs *utils.OrderedMap) error {
+	c, err := model.NewConnector(name, attrs)
+	if err != nil {
+		return err
+	}
 	h.Connectors = append(h.Connectors, c)
 	h.connectorIdx[name] = c
+	return nil
 }
 
 // AddCable adds a cable instance.
-func (h *Harness) AddCable(name string, attrs *utils.OrderedMap) {
-	c := model.NewCable(name, attrs)
+func (h *Harness) AddCable(name string, attrs *utils.OrderedMap) error {
+	c, err := model.NewCable(name, attrs)
+	if err != nil {
+		return err
+	}
 	h.Cables = append(h.Cables, c)
 	h.cableIdx[name] = c
+	return nil
 }
 
 // ConnectorByName returns a connector instance by designator.
@@ -101,7 +109,7 @@ func (h *Harness) AddBomItem(item BOMEntry) {
 }
 
 // Connect wires a cable between two connectors (either side may be empty).
-func (h *Harness) Connect(fromName string, fromPin any, viaName string, viaWire any, toName string, toPin any) {
+func (h *Harness) Connect(fromName string, fromPin any, viaName string, viaWire any, toName string, toPin any) error {
 	for _, pair := range [][2]any{{fromName, fromPin}, {toName, toPin}} {
 		name := pair[0].(string)
 		pin := pair[1]
@@ -111,13 +119,13 @@ func (h *Harness) Connect(fromName string, fromPin any, viaName string, viaWire 
 		if connector, ok := h.connectorIdx[name]; ok {
 			if containsAny(connector.Pins, pin) && containsAny(connector.Pinlabels, pin) {
 				if indexOfAny(connector.Pins, pin) != indexOfAny(connector.Pinlabels, pin) {
-					panic(fmt.Errorf("%s:%s is defined both in pinlabels and pins, for different pins.",
-						name, utils.PyStr(pin)))
+					return fmt.Errorf("%s:%s is defined both in pinlabels and pins, for different pins.",
+						name, utils.PyStr(pin))
 				}
 			}
 			if containsAny(connector.Pinlabels, pin) {
 				if countAny(connector.Pinlabels, pin) > 1 {
-					panic(fmt.Errorf("%s:%s is defined more than once.", name, utils.PyStr(pin)))
+					return fmt.Errorf("%s:%s is defined more than once.", name, utils.PyStr(pin))
 				}
 				index := indexOfAny(connector.Pinlabels, pin)
 				pin = connector.Pins[index]
@@ -129,7 +137,7 @@ func (h *Harness) Connect(fromName string, fromPin any, viaName string, viaWire 
 				}
 			}
 			if !containsAny(connector.Pins, pin) {
-				panic(fmt.Errorf("%s:%s not found.", name, utils.PyStr(pin)))
+				return fmt.Errorf("%s:%s not found.", name, utils.PyStr(pin))
 			}
 		}
 	}
@@ -138,12 +146,12 @@ func (h *Harness) Connect(fromName string, fromPin any, viaName string, viaWire 
 		if ws, isStr := viaWire.(string); isStr {
 			if indexOfStrings(cable.Colors, ws) >= 0 {
 				if countStrings(cable.Colors, ws) > 1 {
-					panic(fmt.Errorf("%s:%s is used for more than one wire.", viaName, ws))
+					return fmt.Errorf("%s:%s is used for more than one wire.", viaName, ws)
 				}
 				viaWire = indexOfStrings(cable.Colors, ws) + 1
 			} else if containsAny(cable.Wirelabels, viaWire) {
 				if countAny(cable.Wirelabels, viaWire) > 1 {
-					panic(fmt.Errorf("%s:%s is used for more than one wire.", viaName, ws))
+					return fmt.Errorf("%s:%s is used for more than one wire.", viaName, ws)
 				}
 				viaWire = indexOfAny(cable.Wirelabels, viaWire) + 1
 			}
@@ -162,14 +170,19 @@ func (h *Harness) Connect(fromName string, fromPin any, viaName string, viaWire 
 			c.ActivatePin(toPin, model.SideLeft)
 		}
 	}
+	return nil
 }
 
 // Bom returns the generated BOM, cached.
-func (h *Harness) Bom() []BOMEntry {
+func (h *Harness) Bom() ([]BOMEntry, error) {
 	if h.bomCache == nil {
-		h.bomCache = GenerateBom(h)
+		bom, err := GenerateBom(h)
+		if err != nil {
+			return nil, err
+		}
+		h.bomCache = bom
 	}
-	return h.bomCache
+	return h.bomCache, nil
 }
 
 func max3(a, b, c int) int {

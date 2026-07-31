@@ -23,6 +23,7 @@ package model
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/dmundt/wgo/pkg/utils"
@@ -42,6 +43,46 @@ func strList(vals ...string) []any {
 		out[i] = v
 	}
 	return out
+}
+
+func mustConnector(t *testing.T, name string, attrs *utils.OrderedMap) *Connector {
+	t.Helper()
+	c, err := NewConnector(name, attrs)
+	if err != nil {
+		t.Fatalf("NewConnector(%q): %v", name, err)
+	}
+	return c
+}
+
+func mustCable(t *testing.T, name string, attrs *utils.OrderedMap) *Cable {
+	t.Helper()
+	c, err := NewCable(name, attrs)
+	if err != nil {
+		t.Fatalf("NewCable(%q): %v", name, err)
+	}
+	return c
+}
+
+func assertConnectorErr(t *testing.T, name string, attrs *utils.OrderedMap, contains string) {
+	t.Helper()
+	_, err := NewConnector(name, attrs)
+	if err == nil {
+		t.Fatalf("%s: expected error containing %q, got nil", name, contains)
+	}
+	if !strings.Contains(err.Error(), contains) {
+		t.Fatalf("%s: error %q does not contain %q", name, err, contains)
+	}
+}
+
+func assertCableErr(t *testing.T, name string, attrs *utils.OrderedMap, contains string) {
+	t.Helper()
+	_, err := NewCable(name, attrs)
+	if err == nil {
+		t.Fatalf("%s: expected error containing %q, got nil", name, contains)
+	}
+	if !strings.Contains(err.Error(), contains) {
+		t.Fatalf("%s: error %q does not contain %q", name, err, contains)
+	}
 }
 
 func TestGetColorHex(t *testing.T) {
@@ -183,7 +224,7 @@ func TestImageExplicitFixedsizeFalse(t *testing.T) {
 }
 
 func TestConnectorBasics(t *testing.T) {
-	c := NewConnector("X1", om("pins", strList("T", "R", "S"), "pinlabels", strList("Dot", "Dash", "Ground")))
+	c := mustConnector(t, "X1", om("pins", strList("T", "R", "S"), "pinlabels", strList("Dot", "Dash", "Ground")))
 	if c.Pincount != 3 {
 		t.Errorf("pincount = %d", c.Pincount)
 	}
@@ -199,7 +240,7 @@ func TestConnectorBasics(t *testing.T) {
 }
 
 func TestConnectorImplicitPincount(t *testing.T) {
-	c := NewConnector("X1", om("pinlabels", strList("A", "B", "C", "D")))
+	c := mustConnector(t, "X1", om("pinlabels", strList("A", "B", "C", "D")))
 	if c.Pincount != 4 {
 		t.Errorf("pincount = %d", c.Pincount)
 	}
@@ -209,7 +250,7 @@ func TestConnectorImplicitPincount(t *testing.T) {
 }
 
 func TestConnectorSimple(t *testing.T) {
-	c := NewConnector("F1", om("style", "simple", "type", "ferrule"))
+	c := mustConnector(t, "F1", om("style", "simple", "type", "ferrule"))
 	if c.Pincount != 1 {
 		t.Errorf("simple pincount = %d", c.Pincount)
 	}
@@ -219,25 +260,15 @@ func TestConnectorSimple(t *testing.T) {
 }
 
 func TestConnectorSimpleError(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("expected panic for simple connector with pincount > 1")
-		}
-	}()
-	NewConnector("X", om("style", "simple", "pincount", 4))
+	assertConnectorErr(t, "X", om("style", "simple", "pincount", 4), "simple")
 }
 
 func TestConnectorNoPinsError(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("expected panic for connector without pin info")
-		}
-	}()
-	NewConnector("X", om("type", "unknown"))
+	assertConnectorErr(t, "X", om("type", "unknown"), "pincount")
 }
 
 func TestConnectorShowNameAuto(t *testing.T) {
-	c := NewConnector("__X_1", om("pincount", 2))
+	c := mustConnector(t, "__X_1", om("pincount", 2))
 	if c.ShowName {
 		t.Errorf("auto-generated connector should hide name")
 	}
@@ -247,16 +278,11 @@ func TestConnectorShowNameAuto(t *testing.T) {
 }
 
 func TestConnectorDuplicatePins(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("expected panic for duplicate pins")
-		}
-	}()
-	NewConnector("X", om("pins", strList("A", "A")))
+	assertConnectorErr(t, "X", om("pins", strList("A", "A")), "Pins are not unique")
 }
 
 func TestConnectorLoops(t *testing.T) {
-	c := NewConnector("X", om("pincount", 4, "loops", []any{[]any{1, 2}}))
+	c := mustConnector(t, "X", om("pincount", 4, "loops", []any{[]any{1, 2}}))
 	if len(c.Loops) != 1 {
 		t.Fatalf("loops = %v", c.Loops)
 	}
@@ -266,69 +292,47 @@ func TestConnectorLoops(t *testing.T) {
 }
 
 func TestConnectorLoopErrors(t *testing.T) {
-	assertPanic := func(name string, attrs *utils.OrderedMap) {
-		t.Helper()
-		defer func() {
-			if r := recover(); r == nil {
-				t.Errorf("%s: expected panic", name)
-			}
-		}()
-		NewConnector(name, attrs)
-	}
-	assertPanic("badlen", om("pincount", 4, "loops", []any{[]any{1}}))
-	assertPanic("badpin", om("pincount", 4, "loops", []any{[]any{1, 9}}))
+	assertConnectorErr(t, "badlen", om("pincount", 4, "loops", []any{[]any{1}}), "Loops must be between exactly two pins")
+	assertConnectorErr(t, "badpin", om("pincount", 4, "loops", []any{[]any{1, 9}}), "Unknown loop pin")
 }
 
 func TestConnectorQtyMultiplier(t *testing.T) {
-	c := NewConnector("X", om("pincount", 4))
-	if got := c.GetQtyMultiplier(""); got != 1 {
-		t.Errorf("default = %v", got)
+	c := mustConnector(t, "X", om("pincount", 4))
+	if got, err := c.GetQtyMultiplier(""); err != nil || got != 1 {
+		t.Errorf("default = %v, %v", got, err)
 	}
-	if got := c.GetQtyMultiplier("pincount"); got != 4 {
-		t.Errorf("pincount = %v", got)
+	if got, err := c.GetQtyMultiplier("pincount"); err != nil || got != 4 {
+		t.Errorf("pincount = %v, %v", got, err)
 	}
-	if got := c.GetQtyMultiplier("populated"); got != 0 {
-		t.Errorf("populated = %v", got)
+	if got, err := c.GetQtyMultiplier("populated"); err != nil || got != 0 {
+		t.Errorf("populated = %v, %v", got, err)
 	}
-	if got := c.GetQtyMultiplier("unpopulated"); got != 4 {
-		t.Errorf("unpopulated = %v", got)
+	if got, err := c.GetQtyMultiplier("unpopulated"); err != nil || got != 4 {
+		t.Errorf("unpopulated = %v, %v", got, err)
 	}
 	c.ActivatePin(1, SideLeft)
 	c.ActivatePin(2, SideRight)
-	if got := c.GetQtyMultiplier("populated"); got != 2 {
-		t.Errorf("populated = %v", got)
+	if got, err := c.GetQtyMultiplier("populated"); err != nil || got != 2 {
+		t.Errorf("populated = %v, %v", got, err)
 	}
-	if got := c.GetQtyMultiplier("unpopulated"); got != 2 {
-		t.Errorf("unpopulated = %v", got)
+	if got, err := c.GetQtyMultiplier("unpopulated"); err != nil || got != 2 {
+		t.Errorf("unpopulated = %v, %v", got, err)
 	}
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("expected panic for invalid multiplier")
-		}
-	}()
-	c.GetQtyMultiplier("bogus")
+	if _, err := c.GetQtyMultiplier("bogus"); err == nil {
+		t.Errorf("expected error for invalid multiplier")
+	}
 }
 
 func TestConnectorUnknownField(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("expected panic for unknown field")
-		}
-	}()
-	NewConnector("X", om("bogus_field", "x"))
+	assertConnectorErr(t, "X", om("bogus_field", "x"), "unexpected keyword argument")
 }
 
 func TestConnectorOldField(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("expected panic for old field")
-		}
-	}()
-	NewConnector("X", om("pinout", []any{"A"}))
+	assertConnectorErr(t, "X", om("pinout", []any{"A"}), "was renamed")
 }
 
 func TestCableColorCode(t *testing.T) {
-	c := NewCable("W1", om("wirecount", 4, "color_code", "IEC"))
+	c := mustCable(t, "W1", om("wirecount", 4, "color_code", "IEC"))
 	want := []string{"BN", "RD", "OG", "YE"}
 	if !reflect.DeepEqual(c.Colors, want) {
 		t.Errorf("colors = %v, want %v", c.Colors, want)
@@ -339,14 +343,14 @@ func TestCableColorCode(t *testing.T) {
 }
 
 func TestCableDummyColors(t *testing.T) {
-	c := NewCable("W1", om("wirecount", 3))
+	c := mustCable(t, "W1", om("wirecount", 3))
 	if !reflect.DeepEqual(c.Colors, []string{"", "", ""}) {
 		t.Errorf("colors = %v", c.Colors)
 	}
 }
 
 func TestCableColorLoop(t *testing.T) {
-	c := NewCable("W1", om("wirecount", 5, "colors", strList("RD", "BU")))
+	c := mustCable(t, "W1", om("wirecount", 5, "colors", strList("RD", "BU")))
 	want := []string{"RD", "BU", "RD", "BU", "RD"}
 	if !reflect.DeepEqual(c.Colors, want) {
 		t.Errorf("colors = %v, want %v", c.Colors, want)
@@ -354,111 +358,94 @@ func TestCableColorLoop(t *testing.T) {
 }
 
 func TestCableImplicitWirecount(t *testing.T) {
-	c := NewCable("W1", om("colors", strList("RD", "BU", "GN")))
+	c := mustCable(t, "W1", om("colors", strList("RD", "BU", "GN")))
 	if c.Wirecount != 3 {
 		t.Errorf("wirecount = %d", c.Wirecount)
 	}
 }
 
 func TestCableUnknownColorCode(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("expected panic for unknown color code")
-		}
-	}()
-	NewCable("W1", om("wirecount", 2, "color_code", "BOGUS"))
+	assertCableErr(t, "W1", om("wirecount", 2, "color_code", "BOGUS"), "Unknown color code")
 }
 
 func TestCableGaugeParse(t *testing.T) {
-	c := NewCable("W1", om("gauge", "0.25 mm2", "wirecount", 1))
+	c := mustCable(t, "W1", om("gauge", "0.25 mm2", "wirecount", 1))
 	if c.Gauge != "0.25" || c.GaugeUnit != "mm²" {
 		t.Errorf("gauge=%v unit=%q", c.Gauge, c.GaugeUnit)
 	}
-	c2 := NewCable("W1", om("gauge", "24 awg", "wirecount", 1))
+	c2 := mustCable(t, "W1", om("gauge", "24 awg", "wirecount", 1))
 	if c2.GaugeUnit != "AWG" {
 		t.Errorf("gauge_unit = %q, want AWG", c2.GaugeUnit)
 	}
-	c3 := NewCable("W1", om("gauge", 0.25, "wirecount", 1))
+	c3 := mustCable(t, "W1", om("gauge", 0.25, "wirecount", 1))
 	if c3.GaugeUnit != "mm²" {
 		t.Errorf("gauge_unit = %q, want mm²", c3.GaugeUnit)
 	}
 }
 
 func TestCableGaugeBad(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("expected panic for bad gauge")
-		}
-	}()
-	NewCable("W1", om("gauge", "not a gauge", "wirecount", 1))
+	assertCableErr(t, "W1", om("gauge", "not a gauge", "wirecount", 1), "Gauge must be a number")
 }
 
 func TestCableLengthParse(t *testing.T) {
-	c := NewCable("W1", om("length", "1 m", "wirecount", 1))
+	c := mustCable(t, "W1", om("length", "1 m", "wirecount", 1))
 	if c.Length != 1.0 || c.LengthUnit != "m" {
 		t.Errorf("length=%v unit=%q", c.Length, c.LengthUnit)
 	}
-	c2 := NewCable("W1", om("length", 1, "wirecount", 1))
+	c2 := mustCable(t, "W1", om("length", 1, "wirecount", 1))
 	if c2.Length != 1 || c2.LengthUnit != "m" {
 		t.Errorf("length=%v unit=%q", c2.Length, c2.LengthUnit)
 	}
-	c3 := NewCable("W1", om("length", 0.2, "wirecount", 1))
+	c3 := mustCable(t, "W1", om("length", 0.2, "wirecount", 1))
 	if c3.Length != 0.2 || c3.LengthUnit != "m" {
 		t.Errorf("length=%v unit=%q", c3.Length, c3.LengthUnit)
 	}
 }
 
 func TestCableShieldWirelabelError(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("expected panic for shield + s wirelabel")
-		}
-	}()
-	NewCable("W1", om("wirecount", 1, "shield", true, "wirelabels", strList("s")))
+	assertCableErr(t, "W1", om("wirecount", 1, "shield", true, "wirelabels", strList("s")), "wire label for a shielded cable")
 }
 
 func TestCableBundlePartData(t *testing.T) {
-	c := NewCable("W1", om("category", "bundle", "colors", strList("RD", "BU"), "pn", []any{"A", "B"}))
+	c := mustCable(t, "W1", om("category", "bundle", "colors", strList("RD", "BU"), "pn", []any{"A", "B"}))
 	if c.Pn == nil {
 		t.Errorf("pn should be set")
 	}
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("expected panic for list part data on non-bundle")
-		}
-	}()
-	NewCable("W2", om("wirecount", 2, "pn", []any{"A", "B"}))
+	assertCableErr(t, "W2", om("wirecount", 2, "pn", []any{"A", "B"}), "only supported for bundles")
 }
 
 func TestCableShowWirenumbers(t *testing.T) {
-	c := NewCable("W1", om("wirecount", 2))
+	c := mustCable(t, "W1", om("wirecount", 2))
 	if !c.ShowWirenumbers {
 		t.Errorf("cable should show wire numbers")
 	}
-	b := NewCable("W1", om("category", "bundle", "wirecount", 2))
+	b := mustCable(t, "W1", om("category", "bundle", "wirecount", 2))
 	if b.ShowWirenumbers {
 		t.Errorf("bundle should hide wire numbers")
 	}
 }
 
 func TestCableQtyMultiplier(t *testing.T) {
-	c := NewCable("W1", om("wirecount", 4, "length", 0.5))
-	if got := c.GetQtyMultiplier(""); got != 1 {
-		t.Errorf("default = %v", got)
+	c := mustCable(t, "W1", om("wirecount", 4, "length", 0.5))
+	if got, err := c.GetQtyMultiplier(""); err != nil || got != 1 {
+		t.Errorf("default = %v, %v", got, err)
 	}
-	if got := c.GetQtyMultiplier("wirecount"); got != 4 {
-		t.Errorf("wirecount = %v", got)
+	if got, err := c.GetQtyMultiplier("wirecount"); err != nil || got != 4 {
+		t.Errorf("wirecount = %v, %v", got, err)
 	}
 	c.Connect("X1", 1, 1, "X2", 1)
 	c.Connect("X1", 2, 2, "X2", 2)
-	if got := c.GetQtyMultiplier("terminations"); got != 2 {
-		t.Errorf("terminations = %v", got)
+	if got, err := c.GetQtyMultiplier("terminations"); err != nil || got != 2 {
+		t.Errorf("terminations = %v, %v", got, err)
 	}
-	if got := c.GetQtyMultiplier("length"); got != 0.5 {
-		t.Errorf("length = %v", got)
+	if got, err := c.GetQtyMultiplier("length"); err != nil || got != 0.5 {
+		t.Errorf("length = %v, %v", got, err)
 	}
-	if got := c.GetQtyMultiplier("total_length"); got != 2.0 {
-		t.Errorf("total_length = %v", got)
+	if got, err := c.GetQtyMultiplier("total_length"); err != nil || got != 2.0 {
+		t.Errorf("total_length = %v, %v", got, err)
+	}
+	if _, err := c.GetQtyMultiplier("bogus"); err == nil {
+		t.Errorf("expected error for invalid multiplier")
 	}
 }
 
@@ -487,7 +474,7 @@ func TestAdditionalComponentDescription(t *testing.T) {
 }
 
 func TestCableConnect(t *testing.T) {
-	c := NewCable("W1", om("wirecount", 2))
+	c := mustCable(t, "W1", om("wirecount", 2))
 	c.Connect("X1", 1, 1, "X2", 1)
 	if len(c.Connections) != 1 {
 		t.Fatalf("connections = %d", len(c.Connections))

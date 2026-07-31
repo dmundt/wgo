@@ -75,10 +75,10 @@ var cableFields = map[string]bool{
 }
 
 // NewCable builds a Cable from a YAML dict and runs the post-init logic.
-func NewCable(name string, attrs *utils.OrderedMap) *Cable {
+func NewCable(name string, attrs *utils.OrderedMap) (*Cable, error) {
 	for _, k := range attrs.Keys() {
 		if !cableFields[k] {
-			panic(fmt.Errorf("Cable.__init__() got an unexpected keyword argument '%s'", k))
+			return nil, fmt.Errorf("Cable.__init__() got an unexpected keyword argument '%s'", k)
 		}
 	}
 	c := &Cable{
@@ -162,15 +162,14 @@ func NewCable(name string, attrs *utils.OrderedMap) *Cable {
 			}
 		}
 	}
-	c.postInit()
-	return c
+	return c, c.postInit()
 }
 
-func (c *Cable) postInit() {
+func (c *Cable) postInit() error {
 	if s, ok := c.Gauge.(string); ok {
 		parts := splitSpace(s)
 		if len(parts) != 2 {
-			panic(fmt.Errorf("Cable %s gauge=%s - Gauge must be a number, or number and unit separated by a space", c.Name, utils.PyStr(c.Gauge)))
+			return fmt.Errorf("Cable %s gauge=%s - Gauge must be a number, or number and unit separated by a space", c.Name, utils.PyStr(c.Gauge))
 		}
 		g, u := parts[0], parts[1]
 		c.Gauge = g
@@ -191,13 +190,13 @@ func (c *Cable) postInit() {
 	if s, ok := c.Length.(string); ok {
 		parts := splitSpace(s)
 		if len(parts) != 2 {
-			panic(fmt.Errorf("Cable %s length=%s - Length must be a number, or number and unit separated by a space", c.Name, utils.PyStr(c.Length)))
+			return fmt.Errorf("Cable %s length=%s - Length must be a number, or number and unit separated by a space", c.Name, utils.PyStr(c.Length))
 		}
 		var L float64
 		var err error
 		L, err = parseFloat(parts[0])
 		if err != nil {
-			panic(fmt.Errorf("Cable %s length=%s - Length must be a number, or number and unit separated by a space", c.Name, utils.PyStr(c.Length)))
+			return fmt.Errorf("Cable %s length=%s - Length must be a number, or number and unit separated by a space", c.Name, utils.PyStr(c.Length))
 		}
 		c.Length = L
 		if c.LengthUnit != "" {
@@ -208,7 +207,7 @@ func (c *Cable) postInit() {
 		switch c.Length.(type) {
 		case int, float64:
 		default:
-			panic(fmt.Errorf("Cable %s length has a non-numeric value", c.Name))
+			return fmt.Errorf("Cable %s length has a non-numeric value", c.Name)
 		}
 		if c.LengthUnit == "" {
 			c.LengthUnit = "m"
@@ -223,7 +222,7 @@ func (c *Cable) postInit() {
 		} else if c.ColorCode != "" {
 			colors, ok := ColorCodes[c.ColorCode]
 			if !ok {
-				panic(fmt.Errorf("Unknown color code"))
+				return fmt.Errorf("Unknown color code")
 			}
 			c.Colors = append([]string(nil), colors...)
 		} else {
@@ -242,7 +241,7 @@ func (c *Cable) postInit() {
 		c.Colors = c.Colors[:c.Wirecount]
 	} else {
 		if len(c.Colors) == 0 {
-			panic(fmt.Errorf("Unknown number of wires. Must specify wirecount or colors (implicit length)"))
+			return fmt.Errorf("Unknown number of wires. Must specify wirecount or colors (implicit length)")
 		}
 		c.Wirecount = len(c.Colors)
 	}
@@ -250,7 +249,7 @@ func (c *Cable) postInit() {
 	if len(c.Wirelabels) > 0 && c.Shield != nil && c.Shield != false {
 		for _, wl := range c.Wirelabels {
 			if utils.PyStr(wl) == "s" {
-				panic(fmt.Errorf("%q may not be used as a wire label for a shielded cable.", "s"))
+				return fmt.Errorf("%q may not be used as a wire label for a shielded cable.", "s")
 			}
 		}
 	}
@@ -259,10 +258,10 @@ func (c *Cable) postInit() {
 		if l, ok := idfield.([]any); ok {
 			if c.Category == "bundle" {
 				if len(l) != c.Wirecount {
-					panic(fmt.Errorf("lists of part data must match wirecount"))
+					return fmt.Errorf("lists of part data must match wirecount")
 				}
 			} else {
-				panic(fmt.Errorf("lists of part data are only supported for bundles"))
+				return fmt.Errorf("lists of part data are only supported for bundles")
 			}
 		}
 	}
@@ -276,6 +275,7 @@ func (c *Cable) postInit() {
 	if !c.showWirenumbersSet {
 		c.ShowWirenumbers = c.Category != "bundle"
 	}
+	return nil
 }
 
 // Connect appends a Connection to the cable.
@@ -290,20 +290,20 @@ func (c *Cable) Connect(fromName string, fromPin any, viaWire any, toName string
 }
 
 // GetQtyMultiplier returns the multiplier for the given qty_multiplier name.
-func (c *Cable) GetQtyMultiplier(qtyMultiplier string) any {
+func (c *Cable) GetQtyMultiplier(qtyMultiplier string) (any, error) {
 	switch qtyMultiplier {
 	case "":
-		return 1
+		return 1, nil
 	case "wirecount":
-		return c.Wirecount
+		return c.Wirecount, nil
 	case "terminations":
-		return len(c.Connections)
+		return len(c.Connections), nil
 	case "length":
-		return c.Length
+		return c.Length, nil
 	case "total_length":
-		return MulNum(c.Length, c.Wirecount)
+		return MulNum(c.Length, c.Wirecount), nil
 	default:
-		panic(fmt.Errorf("invalid qty multiplier parameter for cable %s", qtyMultiplier))
+		return nil, fmt.Errorf("invalid qty multiplier parameter for cable %s", qtyMultiplier)
 	}
 }
 

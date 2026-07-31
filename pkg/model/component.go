@@ -27,8 +27,8 @@ import (
 	"github.com/dmundt/wgo/pkg/utils"
 )
 
-// CheckOld raises for outdated connector attributes.
-func CheckOld(node string, attrs *utils.OrderedMap) {
+// CheckOld returns an error for outdated connector attributes.
+func CheckOld(node string, attrs *utils.OrderedMap) error {
 	old := map[string]string{
 		"pinout":       "was renamed to 'pinlabels' in v0.2",
 		"pinnumbers":   "was renamed to 'pins' in v0.2",
@@ -36,9 +36,10 @@ func CheckOld(node string, attrs *utils.OrderedMap) {
 	}
 	for attr, descr := range old {
 		if attrs.Has(attr) {
-			panic(fmt.Errorf("'%s' in %s: '%s' %s", attr, node, attr, descr))
+			return fmt.Errorf("'%s' in %s: '%s' %s", attr, node, attr, descr)
 		}
 	}
+	return nil
 }
 
 // Connection mirrors the WireViz Connection dataclass.
