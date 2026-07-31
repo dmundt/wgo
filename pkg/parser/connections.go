@@ -172,8 +172,15 @@ func processConnections(connectionSets []any, templateSeparator string, template
 
 		expectedType = ""
 		for _, entry := range connectionSet {
-			for _, item := range entry.([]any) {
-				m := item.(*utils.OrderedMap)
+			items, ok := entry.([]any)
+			if !ok {
+				return fmt.Errorf("Expected a list of designators in connection set, got %T", entry)
+			}
+			for _, item := range items {
+				m, ok := item.(*utils.OrderedMap)
+				if !ok {
+					return fmt.Errorf("Expected a designator in connection set, got %T", item)
+				}
 				designator := m.First().Key
 				template := designatorsAndTemplates[designator]
 				if _, ok := h.ConnectorByName(designator); ok {
